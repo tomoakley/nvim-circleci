@@ -1,6 +1,7 @@
 local api = {}
 local curl = require "plenary.curl"
 local config = require"nvim-circleci.config"
+local cache = require"nvim-circleci.cache"
 
 function api.get_circle_token()
   if api.token then return api.token end
@@ -53,29 +54,37 @@ function api.getAllPipelineIds()
 end
 
 function api.getWorkflowById(id)
+  local cachedWorkflow = cache.getCachedJobsForWorkflowId(id)
+  if cachedWorkflow then return cachedWorkflow end
   local response = makeRequest("GET", string.format("pipeline/%s/workflow", id))
   local data = vim.json.decode(response)
-  local workflowData = {}
   for k,v in pairs(data) do
     if (k == "items") then
       for _, item in ipairs(v) do
-        workflowData[#workflowData+1] = {id = item.id, status = item.status, name = item.name, created_at = item.created_at, number = item.pipeline_number}
+        cache.workflowData[#cache.workflowData+1] = {
+          id = item.id,
+          status = item.status,
+          name = item.name,
+          created_at = item.created_at,
+          number = item.pipeline_number
+        }
       end
     end
   end
-  return workflowData
+  return cache.workflowData
 end
 
 function api.getWorkflowJobs(id)
+  local cachedJobs = cache.getCachedJobsForWorkflowId(id)
+  if cachedJobs then return cachedJobs end
   local response = makeRequest("GET", string.format("workflow/%s/job", id))
   local data = vim.json.decode(response)
-  local items = {}
   for k,v in pairs(data) do
     if (k == "items") then
-      items = v
+      cache.workflowJobs[id] = v
     end
   end
-  return items
+  return cache.workflowJobs[id]
 end
 
 function api.getWorkflowForBranch(sender, branch)
